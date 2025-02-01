@@ -1,11 +1,16 @@
-# py -3.10 C:\Users\Hemant\Downloads\PYTHON\Wave\Gesture_control.py
-
-
 import cv2
 import mediapipe as mp
 import numpy as np
 import pygame
 from pygame.locals import *
+import paho.mqtt.client as mqtt
+
+# MQTT Setup
+BROKER_IP = "192.168.1.4"  # Replace with your Mosquitto broker IP
+PORT = 1883
+TOPIC_FAN = "fan/control"
+TOPIC_METER = "fan/meter"
+client = mqtt.Client()
 
 # Initialize MediaPipe Hands
 mp_hands = mp.solutions.hands
@@ -44,6 +49,21 @@ if not cap.isOpened():
 previous_palm_state = None
 previous_pinch_state = None
 
+# MQTT Callbacks
+def on_connect(client, userdata, flags, rc):
+    print(f"Connected to MQTT broker with result code {rc}")
+    # You can subscribe to topics here if needed.
+    # client.subscribe(TOPIC_FAN)
+
+def on_message(client, userdata, msg):
+    print(f"Message received: {msg.topic} -> {msg.payload}")
+    # Handle received messages, e.g., toggle fan or adjust meter.
+
+# Connect to MQTT broker
+client.on_connect = on_connect
+client.on_message = on_message
+client.connect(BROKER_IP, PORT, 60)
+client.loop_start()
 
 def draw_ui():
     # Camera panel
@@ -144,10 +164,12 @@ def detect_gestures(frame):
                     fan_state = True
                     meter_value = 100  # Always start at 100% when turned on
                     last_intensity = 100
+                    client.publish(TOPIC_FAN, "ON")
                 else:  # Fan turned OFF
                     fan_state = False
                     last_intensity = meter_value
                     meter_value = 0
+                    client.publish(TOPIC_FAN, "OFF")
                 previous_palm_state = current_palm_open
             previous_palm_state = current_palm_open
 
@@ -160,6 +182,7 @@ def detect_gestures(frame):
                 if current_pinch != previous_pinch_state:
                     meter_value += 25 if current_pinch == 'spread' else -25 if current_pinch == 'pinch' else 0
                     meter_value = np.clip(meter_value, 0, 100)
+                    client.publish(TOPIC_METER, str(meter_value))
                     previous_pinch_state = current_pinch
 
     return frame
@@ -178,19 +201,23 @@ while running:
                 if PANEL_PADDING <= btn_x <= PANEL_PADDING + 120 and 450 <= mouse_pos[1] <= 500:
                     if fan_state:
                         meter_value = min(meter_value + 25, 100)
+                        client.publish(TOPIC_METER, str(meter_value))
                 # -25 Button
                 elif PANEL_PADDING * 2 + 120 <= btn_x <= PANEL_PADDING * 2 + 240 and 450 <= mouse_pos[1] <= 500:
                     if fan_state:
                         meter_value = max(meter_value - 25, 0)
+                        client.publish(TOPIC_METER, str(meter_value))
                 # Toggle Button
                 elif PANEL_PADDING <= btn_x <= UI_WIDTH - PANEL_PADDING and 520 <= mouse_pos[1] <= 570:
                     fan_state = not fan_state
                     if fan_state:
                         meter_value = 100  # Reset to 100% when turned on
                         last_intensity = 100
+                        client.publish(TOPIC_FAN, "ON")
                     else:
                         last_intensity = meter_value
                         meter_value = 0
+                        client.publish(TOPIC_FAN, "OFF")
 
     screen.fill(BG_COLOR)
     draw_ui()
