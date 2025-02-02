@@ -10,12 +10,60 @@ import threading
 import logging
 from websockets.exceptions import ConnectionClosed
 
+# For system volume control (Windows)
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+from ctypes import cast, POINTER
+from comtypes import CLSCTX_ALL
+
+# For Linux volume control (uncomment if needed)
+# import alsaaudio
+
 ##########################
 # Gesture Recognition Setup
 ##########################
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
+# Using default detection & tracking confidences.
 hands = mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+
+
+def is_hand_open(hand_landmarks):
+    """Return True if at least three fingers are extended."""
+    fingers = [
+        (mp_hands.HandLandmark.INDEX_FINGER_TIP, mp_hands.HandLandmark.INDEX_FINGER_PIP),
+        (mp_hands.HandLandmark.MIDDLE_FINGER_TIP, mp_hands.HandLandmark.MIDDLE_FINGER_PIP),
+        (mp_hands.HandLandmark.RING_FINGER_TIP, mp_hands.HandLandmark.RING_FINGER_PIP),
+        (mp_hands.HandLandmark.PINKY_TIP, mp_hands.HandLandmark.PINKY_PIP)
+    ]
+    open_fingers = sum(1 for tip, pip in fingers
+                       if hand_landmarks.landmark[tip].y < hand_landmarks.landmark[pip].y)
+    return open_fingers >= 3
+
+
+##########################
+# System Volume Control Setup
+##########################
+# Windows Volume Control
+devices = AudioUtilities.GetSpeakers()
+interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+volume_interface = cast(interface, POINTER(IAudioEndpointVolume))
+min_vol, max_vol = volume_interface.GetVolumeRange()[:2]
+
+
+# Linux Volume Control (uncomment if needed)
+# mixer = alsaaudio.Mixer()
+
+def set_system_volume(volume_percent):
+    """Set system volume (0-100) based on OS."""
+    try:
+        # Windows
+        volume_scalar = np.interp(volume_percent, [0, 100], [min_vol, max_vol])
+        volume_interface.SetMasterVolumeLevel(volume_scalar, None)
+    except Exception as e:
+        # Linux (uncomment if needed)
+        # mixer.setvolume(int(volume_percent))
+        pass
+
 
 ##########################
 # Pygame UI Setup
@@ -36,10 +84,12 @@ PRIMARY_COLOR = (76, 175, 80)
 ACCENT_COLOR = (255, 193, 7)
 TEXT_COLOR = (255, 255, 255)
 
-# Application state (for IoT commands)
-meter_value = 0  # native integer (0-100)
-fan_state = False
+# Application state
+meter_value = 100  # Fan intensity (0-100)
+fan_state = False  # Fan power state
 last_intensity = 100
+
+volume_level = 50  # System volume (0-100)
 
 ##########################
 # Camera Setup
@@ -49,9 +99,10 @@ if not cap.isOpened():
     print("Error: Could not open camera.")
     exit()
 
-# Gesture control states
-previous_palm_state = None
-previous_pinch_state = None
+# Gesture control state variables
+previous_fan_palm_state = None
+previous_fan_pinch_state = None
+previous_vol_pinch_state = None
 
 ##########################
 # WebSocket Server Setup
@@ -59,13 +110,11 @@ previous_pinch_state = None
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("websocket_server")
 
-# Global variables (set later in the server event loop)
 connected_clients = set()
-# Use a threading.Lock since the shared data is accessed from both async callbacks and the main thread.
 connected_clients_lock = threading.Lock()
 ws_loop = None  # The asyncio event loop for the server
 
-# Updated handler: Only one parameter is expected (the websocket).
+
 async def websocket_handler(websocket):
     """Handler for new WebSocket connections."""
     global connected_clients
@@ -79,7 +128,7 @@ async def websocket_handler(websocket):
     try:
         async for message in websocket:
             logger.debug(f"Received message from {websocket.remote_address}: {message}")
-            # For testing, echo back the message to keep the connection alive.
+            # Echo back message for testing
             await websocket.send("echo: " + message)
     except ConnectionClosed:
         logger.warning(f"Connection closed by client: {websocket.remote_address}")
@@ -93,18 +142,16 @@ async def websocket_handler(websocket):
         except Exception as e:
             logger.exception("Error removing client:")
 
+
 async def start_server():
-    """Starts the WebSocket server and sets the event loop."""
     global ws_loop
     ws_loop = asyncio.get_running_loop()
-    # Note: The handler now accepts only one parameter.
     server = await websockets.serve(websocket_handler, "localhost", 8765)
     logger.info("Server started on ws://localhost:8765")
-    # Run forever
-    await asyncio.Future()  # This future will never complete
+    await asyncio.Future()  # Run forever
+
 
 def run_websocket_server():
-    """Run the WebSocket server in its own event loop."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -113,19 +160,21 @@ def run_websocket_server():
         logger.exception("Exception while starting the WebSocket server:")
     loop.run_forever()
 
-# Start the WebSocket server in a separate thread.
+
 ws_thread = threading.Thread(target=run_websocket_server, daemon=True)
 ws_thread.start()
+
 
 ##########################
 # Messaging Functions
 ##########################
 def send_state_update():
-    """Send a JSON message with the current state (e.g., commands to IoT)."""
+    """Send a JSON message with the current fan state and volume."""
     state = {
         "type": "state",
         "fan_state": fan_state,
-        "meter_value": meter_value
+        "meter_value": meter_value,
+        "volume_level": volume_level
     }
     message = json.dumps(state)
 
@@ -141,13 +190,14 @@ def send_state_update():
     if ws_loop is not None:
         asyncio.run_coroutine_threadsafe(send_message(), ws_loop)
 
+
 def send_camera_frame(frame):
-    """Encode the frame as JPEG and send it to clients with a header to indicate a camera frame."""
+    """Encode the frame as JPEG and send it to clients with a header."""
     ret, jpeg = cv2.imencode('.jpg', frame)
     if not ret:
         return
 
-    header = b"frame:"  # Header to identify the message as a camera frame
+    header = b"frame:"  # Header indicating a camera frame
     payload = header + jpeg.tobytes()
 
     async def send_frame():
@@ -162,71 +212,98 @@ def send_camera_frame(frame):
     if ws_loop is not None:
         asyncio.run_coroutine_threadsafe(send_frame(), ws_loop)
 
+
 ##########################
 # Gesture Detection Functions
 ##########################
-def is_hand_open(hand_landmarks):
-    fingers = [
-        (mp_hands.HandLandmark.INDEX_FINGER_TIP, mp_hands.HandLandmark.INDEX_FINGER_PIP),
-        (mp_hands.HandLandmark.MIDDLE_FINGER_TIP, mp_hands.HandLandmark.MIDDLE_FINGER_PIP),
-        (mp_hands.HandLandmark.RING_FINGER_TIP, mp_hands.HandLandmark.RING_FINGER_PIP),
-        (mp_hands.HandLandmark.PINKY_TIP, mp_hands.HandLandmark.PINKY_PIP)
-    ]
-    open_fingers = sum(
-        1 for tip, pip in fingers
-        if hand_landmarks.landmark[tip].y < hand_landmarks.landmark[pip].y
-    )
-    return open_fingers >= 3
-
 def detect_gestures(frame):
-    global meter_value, fan_state, previous_palm_state, previous_pinch_state, last_intensity
+    """
+    Process the frame and update states:
+      - Right hand: Fan control via palm open (on/off) and thumb-index pinch (intensity).
+      - Left hand: Volume control via mapping the pinch distance to system volume.
+    """
+    global meter_value, fan_state, last_intensity, volume_level
+    global previous_fan_palm_state, previous_fan_pinch_state, previous_vol_pinch_state
+
     results = hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-    if results.multi_hand_landmarks:
-        for hand_landmarks in results.multi_hand_landmarks:
-            mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-            current_palm_open = is_hand_open(hand_landmarks)
+    if results.multi_hand_landmarks and results.multi_handedness:
+        for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
+            # Use MediaPipe handedness output directly.
+            handedness = results.multi_handedness[idx].classification[0].label
 
-            if previous_palm_state is not None and current_palm_open != previous_palm_state:
-                if current_palm_open:
-                    fan_state = True
-                    meter_value = 100
-                    last_intensity = 100
-                else:
-                    fan_state = False
-                    last_intensity = meter_value
-                    meter_value = 0
-                send_state_update()
-                previous_palm_state = current_palm_open
-            else:
-                previous_palm_state = current_palm_open
-
-            if fan_state:
-                thumb = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
-                index = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
-                distance = np.hypot(thumb.x - index.x, thumb.y - index.y)
-                current_pinch = 'pinch' if distance < 0.05 else 'spread' if distance > 0.2 else None
-                if current_pinch != previous_pinch_state:
-                    delta = 25 if current_pinch == 'spread' else -25 if current_pinch == 'pinch' else 0
-                    meter_value = int(np.clip(meter_value + delta, 0, 100))
+            if handedness == 'Right':  # Fan control
+                current_palm_open = is_hand_open(hand_landmarks)
+                # Toggle fan state if the palm open state changes.
+                if previous_fan_palm_state is not None and current_palm_open != previous_fan_palm_state:
+                    fan_state = current_palm_open
+                    meter_value = 100 if current_palm_open else meter_value  # Do not force 0 if already lower
+                    last_intensity = 100 if current_palm_open else last_intensity
+                    logger.info(f"Fan toggled {'ON' if fan_state else 'OFF'}")
                     send_state_update()
-                    previous_pinch_state = current_pinch
+                previous_fan_palm_state = current_palm_open
+
+                # Adjust fan intensity with thumb-index pinch if fan is on.
+                if fan_state:
+                    thumb = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+                    index_finger = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+                    distance = np.hypot(thumb.x - index_finger.x, thumb.y - index_finger.y)
+
+                    current_pinch = None
+                    if distance < 0.05:
+                        current_pinch = 'pinch'
+                    elif distance > 0.2:
+                        current_pinch = 'spread'
+
+                    # Only update if a valid gesture is detected and it changed from the previous state.
+                    if current_pinch != previous_fan_pinch_state and current_pinch is not None:
+                        # Use a delta of 25 for fan intensity.
+                        delta = 25 if current_pinch == 'spread' else -25 if current_pinch == 'pinch' else 0
+                        new_meter = int(np.clip(meter_value + delta, 0, 100))
+                        if new_meter != meter_value:
+                            meter_value = new_meter
+                            logger.info(f"Fan intensity adjusted by {delta} to {meter_value}%")
+                            send_state_update()
+                        previous_fan_pinch_state = current_pinch
+                    if current_pinch is None:
+                        previous_fan_pinch_state = None
+
+            elif handedness == 'Left':  # Volume control
+                # Use thumb-index pinch to control system volume.
+                thumb = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+                index_finger = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+                distance = np.hypot(thumb.x - index_finger.x, thumb.y - index_finger.y)
+
+                # Map the distance (0.05 to 0.3) to volume percentage (0-100)
+                new_volume = int(np.interp(distance, [0.05, 0.3], [0, 100]))
+                new_volume = int(np.clip(new_volume, 0, 100))
+
+                # Only update volume if the difference is significant.
+                if abs(new_volume - volume_level) > 2:
+                    volume_level = new_volume
+                    set_system_volume(volume_level)
+                    logger.info(f"Volume set to {volume_level}%")
+                    send_state_update()
+                    previous_vol_pinch_state = new_volume
+
+            mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
     return frame
+
 
 ##########################
 # UI Drawing Functions
 ##########################
-def draw_ui():
-    draw_camera_panel()
-    control_panel = pygame.Surface((UI_WIDTH, screen_height))
-    control_panel.fill(BG_COLOR)
-    draw_meter(control_panel, PANEL_PADDING, 50, UI_WIDTH - 2 * PANEL_PADDING, 300)
-    draw_fan_status(control_panel, PANEL_PADDING, 380)
-    btn_width = (UI_WIDTH - 3 * PANEL_PADDING) // 2
-    draw_button(control_panel, "+25", PANEL_PADDING, 450, btn_width, 50, PRIMARY_COLOR)
-    draw_button(control_panel, "-25", PANEL_PADDING * 2 + btn_width, 450, btn_width, 50, (244, 67, 54))
-    draw_button(control_panel, "TOGGLE POWER", PANEL_PADDING, 520, UI_WIDTH - 2 * PANEL_PADDING, 50, ACCENT_COLOR)
-    screen.blit(control_panel, (CAM_WIDTH, 0))
+def draw_meter(surface, x, y, width, height, value, active, label):
+    """Draw a meter with a label."""
+    pygame.draw.rect(surface, (50, 50, 60), (x, y, width, height), border_radius=10)
+    fill_height = int((value / 100) * height)
+    color = PRIMARY_COLOR if active else (100, 100, 100)
+    pygame.draw.rect(surface, color, (x, y + height - fill_height, width, fill_height), border_radius=10)
+    text = pygame.font.Font(None, 36).render(f"{value}%", True, TEXT_COLOR)
+    surface.blit(text, (x + width // 2 - text.get_width() // 2, y + height // 2 - 10))
+    label_text = pygame.font.Font(None, 24).render(label, True, TEXT_COLOR)
+    surface.blit(label_text, (x, y - 30))
+
 
 def draw_camera_panel():
     success, frame = cap.read()
@@ -239,36 +316,34 @@ def draw_camera_panel():
         camera_surf = pygame.surfarray.make_surface(frame.swapaxes(0, 1))
         screen.blit(camera_surf, (0, (screen_height - CAM_HEIGHT) // 2))
 
-def draw_meter(surface, x, y, width, height):
-    pygame.draw.rect(surface, (50, 50, 60), (x, y, width, height), border_radius=10)
-    fill_height = int((meter_value / 100) * height)
-    pygame.draw.rect(surface, PRIMARY_COLOR if fan_state else (100, 100, 100),
-                     (x, y + height - fill_height, width, fill_height), border_radius=10)
-    text = pygame.font.Font(None, 36).render(f"{meter_value}%", True, TEXT_COLOR)
-    surface.blit(text, (x + width // 2 - text.get_width() // 2, y + height // 2 - 10))
 
-def draw_fan_status(surface, x, y):
-    radius = 30
-    color = ACCENT_COLOR if fan_state else (100, 100, 100)
-    pygame.draw.circle(surface, color, (x + 50, y), radius, 3 if not fan_state else 0)
-    if fan_state:
-        for i in range(3):
-            angle = i * 120 + (pygame.time.get_ticks() // 10 % 360)
-            end_x = x + 50 + radius * 0.8 * np.cos(np.radians(angle))
-            end_y = y + radius * 0.8 * np.sin(np.radians(angle))
-            pygame.draw.line(surface, ACCENT_COLOR, (x + 50, y), (end_x, end_y), 3)
-    status_text = pygame.font.Font(None, 36).render("RUNNING" if fan_state else "STOPPED", True, TEXT_COLOR)
-    surface.blit(status_text, (x, y + 50))
+def draw_ui():
+    draw_camera_panel()
+    control_panel = pygame.Surface((UI_WIDTH, screen_height))
+    control_panel.fill(BG_COLOR)
+    draw_meter(control_panel, PANEL_PADDING, 50, UI_WIDTH - 2 * PANEL_PADDING, 150,
+               meter_value, fan_state, "Fan Control (Right Hand)")
+    draw_meter(control_panel, PANEL_PADDING, 250, UI_WIDTH - 2 * PANEL_PADDING, 150,
+               volume_level, True, "Volume Control (Left Hand)")
+    status_font = pygame.font.Font(None, 24)
+    fan_status = status_font.render(f"Fan: {'RUNNING' if fan_state else 'STOPPED'}",
+                                    True, PRIMARY_COLOR if fan_state else (100, 100, 100))
+    vol_status = status_font.render(f"System Volume: {volume_level}%", True, PRIMARY_COLOR)
+    control_panel.blit(fan_status, (PANEL_PADDING, 210))
+    control_panel.blit(vol_status, (PANEL_PADDING, 410))
+    screen.blit(control_panel, (CAM_WIDTH, 0))
+
 
 def draw_button(surface, text, x, y, width, height, color):
     mouse = pygame.mouse.get_pos()
     btn_rect = pygame.Rect(CAM_WIDTH + x, y, width, height)
     if btn_rect.collidepoint(mouse):
-        # Slightly brighten the color on hover.
         color = tuple(min(c + 30, 255) for c in color)
     pygame.draw.rect(surface, color, (x, y, width, height), border_radius=5)
     text_surf = pygame.font.Font(None, 36).render(text, True, TEXT_COLOR)
-    surface.blit(text_surf, (x + (width - text_surf.get_width()) // 2, y + (height - text_surf.get_height()) // 2))
+    surface.blit(text_surf, (x + (width - text_surf.get_width()) // 2,
+                             y + (height - text_surf.get_height()) // 2))
+
 
 ##########################
 # Main Loop
@@ -282,17 +357,14 @@ while running:
             mouse_pos = pygame.mouse.get_pos()
             if mouse_pos[0] > CAM_WIDTH:
                 btn_x = mouse_pos[0] - CAM_WIDTH
-                # Check for +25 button
                 if PANEL_PADDING <= btn_x <= PANEL_PADDING + 120 and 450 <= mouse_pos[1] <= 500:
                     if fan_state:
                         meter_value = min(meter_value + 25, 100)
                         send_state_update()
-                # Check for -25 button
                 elif PANEL_PADDING * 2 + 120 <= btn_x <= PANEL_PADDING * 2 + 240 and 450 <= mouse_pos[1] <= 500:
                     if fan_state:
                         meter_value = max(meter_value - 25, 0)
                         send_state_update()
-                # Check for TOGGLE POWER button
                 elif PANEL_PADDING <= btn_x <= UI_WIDTH - PANEL_PADDING and 520 <= mouse_pos[1] <= 570:
                     fan_state = not fan_state
                     if fan_state:
