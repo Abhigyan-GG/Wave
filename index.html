@@ -1,96 +1,150 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gesture Control</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            background: linear-gradient(135deg, #1e3c72, #2a5298);
-            color: white;
-            text-align: center;
-        }
-        h1 {
-            margin-bottom: 10px;
-        }
-        #status {
-            font-size: 18px;
-            margin-bottom: 15px;
-            padding: 10px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
-        }
-        video {
-            border: 3px solid white;
-            border-radius: 10px;
-            width: 70%;
-            max-width: 600px;
-        }
-        #controls {
-            margin-top: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        .control-box {
-            background: rgba(255, 255, 255, 0.2);
-            padding: 10px;
-            border-radius: 8px;
-            margin: 5px;
-            width: 80%;
-            max-width: 300px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gesture Control</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: linear-gradient(135deg, #1e3c72, #2a5298);
+      color: white;
+      text-align: center;
+    }
+    h1 { margin-bottom: 10px; }
+    #status {
+      font-size: 18px;
+      margin-bottom: 15px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+    }
+    video {
+      border: 3px solid white;
+      border-radius: 10px;
+      width: 70%;
+      max-width: 600px;
+    }
+    #controls {
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .control-box {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 10px;
+      border-radius: 8px;
+      margin: 5px;
+      width: 80%;
+      max-width: 300px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin-top: 20px;
+      background-color: #4CAF50;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      color: white;
+    }
+  </style>
 </head>
 <body>
-    <h1>Gesture Control System</h1>
-    <div id="status">Connecting to WebSocket...</div>
-    <video id="video" autoplay></video>
-    <div id="controls">
-        <div class="control-box">Fan: <span id="fan-status">OFF</span></div>
-        <div class="control-box">Fan Speed: <span id="fan-speed">0%</span></div>
-        <div class="control-box">System Volume: <span id="volume-level">50%</span></div>
-    </div>
+  <h1>Gesture Control System</h1>
+  <div id="status">Connecting to WebSocket...</div>
+  <video id="video" autoplay playsinline></video>
+  <!-- Hidden canvas for frame capture -->
+  <canvas id="canvas" style="display: none;"></canvas>
+  <button id="startButton">Start Camera</button>
+  <div id="controls">
+    <div class="control-box">Fan: <span id="fan-status">OFF</span></div>
+    <div class="control-box">Fan Speed: <span id="fan-speed">0%</span></div>
+    <div class="control-box">System Volume: <span id="volume-level">50%</span></div>
+  </div>
 
-    <script>
-        const video = document.getElementById("video");
-        const statusDiv = document.getElementById("status");
-        const fanStatus = document.getElementById("fan-status");
-        const fanSpeed = document.getElementById("fan-speed");
-        const volumeLevel = document.getElementById("volume-level");
+  <script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const statusDiv = document.getElementById("status");
+    const fanStatus = document.getElementById("fan-status");
+    const fanSpeed = document.getElementById("fan-speed");
+    const volumeLevel = document.getElementById("volume-level");
+    const startButton = document.getElementById("startButton");
 
-        const ws = new WebSocket("ws://localhost:8765");
+    // Create the WebSocket connection
+    const ws = new WebSocket('ws://192.168.1.5:8765');
+    ws.binaryType = 'arraybuffer';
 
-        ws.onopen = () => {
-            statusDiv.textContent = "Connected to WebSocket";
-        };
+    ws.onopen = () => {
+      statusDiv.textContent = "Connected to WebSocket";
+    };
 
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.fan_status !== undefined) fanStatus.textContent = data.fan_status ? "ON" : "OFF";
-            if (data.fan_speed !== undefined) fanSpeed.textContent = data.fan_speed + "%";
-            if (data.volume !== undefined) volumeLevel.textContent = data.volume + "%";
-        };
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.fan_status !== undefined)
+        fanStatus.textContent = data.fan_status ? "ON" : "OFF";
+      if (data.fan_speed !== undefined)
+        fanSpeed.textContent = data.fan_speed + "%";
+      if (data.volume !== undefined)
+        volumeLevel.textContent = data.volume + "%";
+    };
 
-        ws.onclose = () => {
-            statusDiv.textContent = "WebSocket Disconnected";
-        };
+    ws.onclose = () => {
+      statusDiv.textContent = "WebSocket Disconnected";
+    };
 
-        // Access webcam
-        navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => {
-                video.srcObject = stream;
-            })
-            .catch(err => {
-                statusDiv.textContent = "Camera access denied";
-                console.error("Error accessing camera: ", err);
-            });
-    </script>
+    // Function to capture a frame and send it via WebSocket
+    function processFrame() {
+      const ctx = canvas.getContext("2d");
+      // Set canvas dimensions to match video
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      // Optionally, flip the image if needed (here we flip horizontally)
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      // Convert canvas to JPEG and send if WebSocket is open
+      canvas.toBlob(blob => {
+        if (blob && ws.readyState === WebSocket.OPEN) {
+          const header = new TextEncoder().encode("frame:");
+          blob.arrayBuffer().then(buffer => {
+            const combined = new Uint8Array(header.length + buffer.byteLength);
+            combined.set(header, 0);
+            combined.set(new Uint8Array(buffer), header.length);
+            ws.send(combined);
+          });
+        }
+      }, 'image/jpeg', 0.5);
+    }
+
+    // Use setInterval to send frames at roughly 10 FPS
+    function startSendingFrames() {
+      setInterval(processFrame, 100);
+    }
+
+    // Start camera on button click to trigger user interaction (ensures permission prompt)
+    startButton.addEventListener("click", () => {
+      navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 320 }, height: { ideal: 240 } } })
+        .then(stream => {
+          video.srcObject = stream;
+          startButton.style.display = "none"; // Hide the start button after camera starts
+          startSendingFrames(); // Start sending frames to the server
+        })
+        .catch(err => {
+          statusDiv.textContent = "Camera access denied";
+          console.error("Error accessing camera:", err);
+        });
+    });
+  </script>
 </body>
 </html>
