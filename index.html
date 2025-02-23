@@ -1,10 +1,96 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture Control</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: white;
+            text-align: center;
+        }
+        h1 {
+            margin-bottom: 10px;
+        }
+        #status {
+            font-size: 18px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+        }
+        video {
+            border: 3px solid white;
+            border-radius: 10px;
+            width: 70%;
+            max-width: 600px;
+        }
+        #controls {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .control-box {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px;
+            border-radius: 8px;
+            margin: 5px;
+            width: 80%;
+            max-width: 300px;
+        }
+    </style>
 </head>
 <body>
-$END$
+    <h1>Gesture Control System</h1>
+    <div id="status">Connecting to WebSocket...</div>
+    <video id="video" autoplay></video>
+    <div id="controls">
+        <div class="control-box">Fan: <span id="fan-status">OFF</span></div>
+        <div class="control-box">Fan Speed: <span id="fan-speed">0%</span></div>
+        <div class="control-box">System Volume: <span id="volume-level">50%</span></div>
+    </div>
+
+    <script>
+        const video = document.getElementById("video");
+        const statusDiv = document.getElementById("status");
+        const fanStatus = document.getElementById("fan-status");
+        const fanSpeed = document.getElementById("fan-speed");
+        const volumeLevel = document.getElementById("volume-level");
+
+        const ws = new WebSocket("ws://localhost:8765");
+
+        ws.onopen = () => {
+            statusDiv.textContent = "Connected to WebSocket";
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.fan_status !== undefined) fanStatus.textContent = data.fan_status ? "ON" : "OFF";
+            if (data.fan_speed !== undefined) fanSpeed.textContent = data.fan_speed + "%";
+            if (data.volume !== undefined) volumeLevel.textContent = data.volume + "%";
+        };
+
+        ws.onclose = () => {
+            statusDiv.textContent = "WebSocket Disconnected";
+        };
+
+        // Access webcam
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                statusDiv.textContent = "Camera access denied";
+                console.error("Error accessing camera: ", err);
+            });
+    </script>
 </body>
 </html>

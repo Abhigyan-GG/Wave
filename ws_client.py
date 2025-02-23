@@ -1,60 +1,64 @@
 import asyncio
-import websockets
 import cv2
 import numpy as np
-import json
+import websockets
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger("ws_test_client")
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ws_client")
+
+# WebSocket server URI (adjust if running on another machine)
+WS_SERVER_URI = "ws://localhost:8765"
+
+# Header to prepend to each frame
+HEADER = b"frame:"
 
 
-async def test_client():
-    uri = "ws://localhost:8765"
-    logger.info(f"Connecting to {uri} ...")
-    try:
-        async with websockets.connect(uri, ping_interval=20) as websocket:
-            logger.info("Connected to the server.")
-            # Send an initial greeting if desired.
-            await websocket.send("Hello, server!")
-            logger.info("Sent initial greeting to server.")
+async def send_frames():
+    while True:  # Keep retrying if connection is lost
+        try:
+            async with websockets.connect(WS_SERVER_URI) as websocket:
+                cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Use DirectShow to avoid MSMF issues on Windows
+                if not cap.isOpened():
+                    logger.error("Error: Could not open camera.")
+                    return
 
-            while True:
-                try:
-                    message = await websocket.recv()
-                except websockets.ConnectionClosed as e:
-                    logger.error(f"Connection closed: {e}")
-                    break
+                logger.info("Connected to WebSocket server. Starting frame transmission...")
 
-                # If the message is in bytes, check for the camera frame header.
-                if isinstance(message, bytes):
-                    header = b"frame:"
-                    if message.startswith(header):
-                        jpeg_bytes = message[len(header):]
-                        nparr = np.frombuffer(jpeg_bytes, np.uint8)
-                        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                        if frame is not None:
-                            cv2.imshow("Camera Feed", frame)
-                            # Press "q" to exit.
-                            if cv2.waitKey(1) & 0xFF == ord('q'):
-                                break
-                        else:
-                            logger.error("Failed to decode frame.")
-                    else:
-                        logger.warning("Received unknown binary message.")
-                else:
-                    # Try to decode JSON state updates.
-                    try:
-                        data = json.loads(message)
-                        logger.info(f"Received state update: {data}")
-                    except Exception as ex:
-                        logger.info(f"Received text message: {message}")
-    except Exception as ex:
-        logger.exception(f"An error occurred: {ex}")
-    finally:
-        cv2.destroyAllWindows()
-        logger.info("Client finished.")
+                while True:
+                    ret, frame = cap.read()
+                    if not ret:
+                        logger.error("Failed to capture frame")
+                        continue
+
+                    # Encode the frame as JPEG
+                    success, jpeg = cv2.imencode('.jpg', frame)
+                    if not success:
+                        logger.error("Failed to encode frame")
+                        continue
+
+                    # Construct the payload with a header
+                    payload = HEADER + jpeg.tobytes()
+
+                    # Send the frame to the WebSocket server
+                    await websocket.send(payload)
+                    logger.debug("Frame sent")
+
+                    await asyncio.sleep(0.1)  # Control frame rate (~10 fps)
+
+        except websockets.exceptions.ConnectionClosedError as e:
+            logger.error(f"WebSocket connection closed unexpectedly: {e}")
+            logger.info("Reconnecting in 2 seconds...")
+            await asyncio.sleep(2)
+        except Exception as e:
+            logger.exception(f"Unexpected error: {e}")
+            await asyncio.sleep(2)
+
+
+def main():
+    asyncio.run(send_frames())
 
 
 if __name__ == "__main__":
-    asyncio.run(test_client())
+    main()
