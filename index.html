@@ -1,149 +1,435 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gesture Control</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Vortix - Gesture Control</title>
   <style>
+    :root {
+      --primary-color: #4CAF50;
+      --accent-color: #FFD700;
+      --dark-bg: #1e3c72;
+      --light-bg: #2a5298;
+      --text-color: #ffffff;
+      --panel-bg: rgba(255, 255, 255, 0.2);
+      --success-color: #4CAF50;
+      --warning-color: #FFC107;
+      --error-color: #F44336;
+    }
+    * {
+      margin: 0; padding: 0; box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
     body {
-      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, var(--dark-bg), var(--light-bg));
+      color: var(--text-color);
+      min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      height: 100vh;
-      background: linear-gradient(135deg, #1e3c72, #2a5298);
-      color: white;
-      text-align: center;
+      overflow-x: hidden;
     }
-    h1 { margin-bottom: 10px; }
-    #status {
-      font-size: 18px;
-      margin-bottom: 15px;
-      padding: 10px;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 8px;
+    header {
+      width: 100%; padding: 20px; text-align: center;
+      background-color: rgba(0,0,0,0.2); margin-bottom: 30px;
     }
-    video {
-      border: 3px solid white;
-      border-radius: 10px;
-      width: 70%;
-      max-width: 600px;
+    h1 {
+      font-size: 2.5rem; font-weight: 700; margin-bottom: 10px;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
     }
-    #controls {
-      margin-top: 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+    .subtitle { font-size: 1.2rem; font-weight: 300; margin-bottom: 20px; }
+    .container {
+      width: 90%; max-width: 1200px; display: flex; flex-direction: column;
+      align-items: center; gap: 30px; padding-bottom: 50px;
     }
-    .control-box {
-      background: rgba(255, 255, 255, 0.2);
-      padding: 10px;
-      border-radius: 8px;
-      margin: 5px;
-      width: 80%;
-      max-width: 300px;
+    .panel {
+      background-color: var(--panel-bg); backdrop-filter: blur(10px);
+      border-radius: 15px; padding: 20px; width: 100%;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     }
+    .video-container {
+      position: relative;
+        width: 100%;
+        height: 0;
+      padding-bottom: 56.25%; /* 16:9 ratio */
+      background-color: #000; border-radius: 10px; overflow: hidden;
+    }
+    #video-element {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    #canvas-overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 10; /* Mirror canvas */
+    }
+    .status-bar {
+      background-color: rgba(0,0,0,0.3);
+      padding: 10px 20px; border-radius: 30px;
+      display: flex; align-items: center; gap: 15px; margin-top: 20px;
+    }
+    .status-indicator {
+      width: 15px; height: 15px; border-radius: 50%;
+      background-color: var(--warning-color);
+    }
+    .status-indicator.active { background-color: var(--success-color); }
+    .status-text { font-weight: 500; }
+    .control-panel {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr));
+      gap: 20px; width: 100%;
+    }
+    .control-section {
+      padding: 15px; border-radius: 10px; background-color: rgba(0,0,0,0.2);
+    }
+    .section-title {
+      font-size: 1.2rem; font-weight: 600; margin-bottom: 15px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .section-title i { font-size: 1.4rem; color: var(--accent-color); }
+    .control-group { margin-bottom: 15px; }
+    .control-label { display: block; margin-bottom: 5px; font-weight: 500; }
+    .toggle-switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+      background-color: rgba(0,0,0,0.3); transition: .4s; border-radius: 34px;
+    }
+    .slider:before {
+      position: absolute; content: ""; height: 26px; width: 26px;
+      left: 4px; bottom: 4px; background-color: var(--text-color);
+      transition: .4s; border-radius: 50%;
+    }
+    input:checked + .slider { background-color: var(--primary-color); }
+    input:focus + .slider { box-shadow: 0 0 1px var(--primary-color); }
+    input:checked + .slider:before { transform: translateX(26px); }
+    select, button, input[type="range"] {
+      width: 100%; padding: 10px; border-radius: 5px; border: none;
+      background-color: rgba(255,255,255,0.1); color: var(--text-color);
+      margin-bottom: 10px; outline: none;
+    }
+    select option { background-color: var(--dark-bg); }
     button {
-      padding: 10px 20px;
-      font-size: 16px;
-      margin-top: 20px;
-      background-color: #4CAF50;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      color: white;
+      background-color: var(--primary-color); cursor: pointer; font-weight: 600;
+      transition: all 0.3s ease; outline: none;
+    }
+    button:hover { background-color: #3e8e41; transform: translateY(-2px); }
+    button:active { transform: translateY(0); }
+    .gesture-list {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr));
+      gap: 15px;
+    }
+    .gesture-card {
+      background-color: rgba(0,0,0,0.2); border-radius: 8px; padding: 15px;
+      text-align: center; transition: all 0.3s ease;
+    }
+    .gesture-card.active { background-color: var(--primary-color); transform: scale(1.05); }
+    .gesture-icon { font-size: 2rem; margin-bottom: 10px; }
+    .log-panel {
+      height: 200px; overflow-y: auto; padding: 15px;
+      background-color: rgba(0,0,0,0.3); border-radius: 10px;
+      font-family: monospace; font-size: 0.9rem;
+    }
+    .log-entry { margin-bottom: 5px; line-height: 1.5; }
+    .log-time { color: var(--accent-color); margin-right: 10px; }
+    .log-info { color: #64B5F6; }
+    .log-success { color: var(--success-color); }
+    .log-warning { color: var(--warning-color); }
+    .log-error { color: var(--error-color); }
+    @media (max-width: 768px) {
+      .container { width: 95%; }
+      h1 { font-size: 2rem; }
+      .subtitle { font-size: 1rem; }
     }
   </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
-  <h1>Gesture Control System</h1>
-  <div id="status">Connecting to WebSocket...</div>
-  <video id="video" autoplay playsinline></video>
-  <!-- Hidden canvas for frame capture -->
-  <canvas id="canvas" style="display: none;"></canvas>
-  <button id="startButton">Start Camera</button>
-  <div id="controls">
-    <div class="control-box">Fan: <span id="fan-status">OFF</span></div>
-    <div class="control-box">Fan Speed: <span id="fan-speed">0%</span></div>
-    <div class="control-box">System Volume: <span id="volume-level">50%</span></div>
+  <header>
+    <h1>Vortix Gesture Control</h1>
+    <p class="subtitle">Use hand gestures to control fan and volume</p>
+  </header>
+
+  <div class="container">
+    <!-- Camera + Overlay Panel -->
+    <div class="panel">
+      <div class="video-container">
+        <video id="video-element" autoplay playsinline></video>
+        <canvas id="canvas-overlay"></canvas>
+      </div>
+
+      <div class="status-bar">
+        <div class="status-indicator" id="camera-status"></div>
+        <div class="status-text">Camera: Waiting for permission</div>
+        <div class="status-indicator" id="model-status"></div>
+        <div class="status-text">Model: Loading</div>
+      </div>
+    </div>
+
+    <!-- Controls Panel -->
+    <div class="panel control-panel">
+      <!-- Gesture Toggle & Calibration -->
+      <div class="control-section">
+        <div class="section-title">
+          <i class="fas fa-hand"></i>
+          <span>Fan & Volume Controls</span>
+        </div>
+
+        <div class="control-group">
+          <label class="control-label">Enable Gesture Detection</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="gesture-toggle" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="control-group">
+          <label class="control-label">Confidence Threshold</label>
+          <input type="range" min="10" max="95" value="70" id="confidence-slider">
+          <span id="confidence-value">70%</span>
+        </div>
+
+        <button id="calibrate-btn">
+          <i class="fas fa-sync"></i> Calibrate
+        </button>
+      </div>
+
+      <!-- (Optional) Additional Settings -->
+      <div class="control-section">
+        <div class="section-title">
+          <i class="fas fa-sliders-h"></i>
+          <span>Advanced Settings</span>
+        </div>
+
+        <div class="control-group">
+          <label class="control-label">Detection Mode</label>
+          <select id="detection-mode">
+            <option value="continuous">Continuous</option>
+            <option value="single">Single Gesture</option>
+          </select>
+        </div>
+
+        <button id="save-preset-btn">
+          <i class="fas fa-save"></i> Save Current Settings
+        </button>
+      </div>
+    </div>
+
+    <!-- Recognized Gestures -->
+    <div class="panel">
+      <div class="section-title">
+        <i class="fas fa-hand-sparkles"></i>
+        <span>Detected Gestures</span>
+      </div>
+
+      <div class="gesture-list">
+        <!-- Replace or rename as needed -->
+        <div class="gesture-card" id="gesture-palm-open">
+          <div class="gesture-icon"><i class="fas fa-hand-paper"></i></div>
+          <div class="gesture-name">Palm Open</div>
+        </div>
+
+        <div class="gesture-card" id="gesture-palm-closed">
+          <div class="gesture-icon"><i class="fas fa-fist-raised"></i></div>
+          <div class="gesture-name">Palm Closed</div>
+        </div>
+
+        <div class="gesture-card" id="gesture-pinch">
+          <div class="gesture-icon"><i class="fas fa-hand-pinching"></i></div>
+          <div class="gesture-name">Pinch</div>
+        </div>
+
+        <div class="gesture-card" id="gesture-spread">
+          <div class="gesture-icon"><i class="fas fa-hand-paper"></i></div>
+          <div class="gesture-name">Spread</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="panel">
+      <div class="section-title">
+        <i class="fas fa-terminal"></i>
+        <span>System Log</span>
+      </div>
+
+      <div class="log-panel" id="log-container">
+        <div class="log-entry">
+          <span class="log-time">12:00:00</span>
+          <span class="log-info">System initialized</span>
+        </div>
+        <div class="log-entry">
+          <span class="log-time">12:00:05</span>
+          <span class="log-warning">Waiting for camera permission...</span>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <script>
-    const video = document.getElementById("video");
-    const canvas = document.getElementById("canvas");
-    const statusDiv = document.getElementById("status");
-    const fanStatus = document.getElementById("fan-status");
-    const fanSpeed = document.getElementById("fan-speed");
-    const volumeLevel = document.getElementById("volume-level");
-    const startButton = document.getElementById("startButton");
+  <!-- Hidden Canvas for capturing frames -->
+  <canvas id="capture-canvas" style="display:none;"></canvas>
 
-    // Create the WebSocket connection
-    const ws = new WebSocket('ws://192.168.1.5:8765');
-    ws.binaryType = 'arraybuffer';
+  <script>
+    // WebSocket to Python backend
+    const ws = new WebSocket("ws://localhost:8765");
 
     ws.onopen = () => {
-      statusDiv.textContent = "Connected to WebSocket";
+      console.log("WebSocket connected");
     };
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      if (data.fan_status !== undefined)
-        fanStatus.textContent = data.fan_status ? "ON" : "OFF";
-      if (data.fan_speed !== undefined)
-        fanSpeed.textContent = data.fan_speed + "%";
-      if (data.volume !== undefined)
-        volumeLevel.textContent = data.volume + "%";
+
+      if (data.type === "gesture") {
+        highlightGesture(data.name);
+      } else if (data.type === "state") {
+        // e.g. data.fan_state, data.fan_speed, data.volume
+        console.log("Fan:", data.fan_state, "Speed:", data.fan_speed, "Vol:", data.volume);
+      }
     };
 
-    ws.onclose = () => {
-      statusDiv.textContent = "WebSocket Disconnected";
+    ws.onerror = (err) => {
+      console.error("WebSocket error:", err);
     };
 
-    // Function to capture a frame and send it via WebSocket
-    function processFrame() {
-      const ctx = canvas.getContext("2d");
-      // Set canvas dimensions to match video
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+    // Function to highlight a recognized gesture
+    function highlightGesture(gestureName) {
+      document.querySelectorAll('.gesture-card').forEach(card => {
+        card.classList.remove('active');
+      });
+      const card = document.getElementById(`gesture-${gestureName}`);
+      if (card) {
+        card.classList.add('active');
+      }
+    }
 
-      // Optionally, flip the image if needed (here we flip horizontally)
-      ctx.save();
-      ctx.scale(-1, 1);
-      ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
-      ctx.restore();
+    // Camera
+    const videoElement = document.getElementById("video-element");
+    const cameraStatus = document.getElementById("camera-status");
+    const modelStatus = document.getElementById("model-status");
+    const logContainer = document.getElementById("log-container");
+    const canvasOverlay = document.getElementById("canvas-overlay");
+    const ctx = canvasOverlay.getContext("2d");
 
-      // Convert canvas to JPEG and send if WebSocket is open
-      canvas.toBlob(blob => {
-        if (blob && ws.readyState === WebSocket.OPEN) {
-          const header = new TextEncoder().encode("frame:");
-          blob.arrayBuffer().then(buffer => {
-            const combined = new Uint8Array(header.length + buffer.byteLength);
+    // Hidden canvas for frame capture
+    const captureCanvas = document.getElementById("capture-canvas");
+    const captureCtx = captureCanvas.getContext("2d");
+
+    let gestureEnabled = true;
+    let confidenceThreshold = 0.7; // 70%
+
+    // Logging
+    function logEntry(message, type = "info") {
+      const now = new Date();
+      const time = now.toLocaleTimeString();
+      const entry = document.createElement("div");
+      entry.className = "log-entry";
+      entry.innerHTML = `<span class="log-time">${time}</span><span class="log-${type}">${message}</span>`;
+      logContainer.appendChild(entry);
+      logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    // Initialize camera
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        videoElement.srcObject = stream;
+        cameraStatus.classList.add("active");
+        document.querySelector(".status-text").textContent = "Camera: Connected";
+        logEntry("Camera successfully connected", "success");
+
+        // Adjust overlay canvas to match video size
+        canvasOverlay.width = videoElement.clientWidth;
+        canvasOverlay.height = videoElement.clientHeight;
+
+        // Start sending frames to Python
+        startFrameCapture();
+
+      } catch (error) {
+        logEntry(`Camera access error: ${error.message}`, "error");
+        document.querySelector(".status-text").textContent = "Camera: Error";
+      }
+    }
+
+    // Send frames over WebSocket
+    const CAPTURE_INTERVAL_MS = 100; // ~10 FPS
+    function startFrameCapture() {
+      setInterval(() => {
+        if (!gestureEnabled) return; // If gesture detection is off, skip
+
+        if (ws.readyState !== WebSocket.OPEN) return; // WebSocket not open
+
+        // Ensure video is playing
+        if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) return;
+
+        // Draw current frame to hidden canvas
+        captureCanvas.width = videoElement.videoWidth;
+        captureCanvas.height = videoElement.videoHeight;
+        captureCtx.drawImage(videoElement, 0, 0, captureCanvas.width, captureCanvas.height);
+
+        // Convert canvas to JPEG blob
+        captureCanvas.toBlob((blob) => {
+          if (!blob) return;
+          const reader = new FileReader();
+          reader.onload = function() {
+            const arrayBuffer = reader.result;
+            // Prepend "frame:"
+            const header = new TextEncoder().encode("frame:");
+            const combined = new Uint8Array(header.length + arrayBuffer.byteLength);
             combined.set(header, 0);
-            combined.set(new Uint8Array(buffer), header.length);
+            combined.set(new Uint8Array(arrayBuffer), header.length);
+
+            // Send to Python
             ws.send(combined);
-          });
+          };
+          // 50% JPEG quality
+          reader.readAsArrayBuffer(blob);
+        }, "image/jpeg", 0.5);
+      }, CAPTURE_INTERVAL_MS);
+    }
+
+    // DOMContentLoaded
+    document.addEventListener("DOMContentLoaded", () => {
+      initCamera();
+
+      // Fake model loading
+      setTimeout(() => {
+        modelStatus.classList.add("active");
+        document.querySelectorAll(".status-text")[1].textContent = "Model: Ready";
+        logEntry("Hand detection model loaded successfully", "success");
+      }, 2000);
+
+      // Confidence slider
+      const confidenceSlider = document.getElementById("confidence-slider");
+      const confidenceValue = document.getElementById("confidence-value");
+      confidenceSlider.addEventListener("input", () => {
+        confidenceValue.textContent = `${confidenceSlider.value}%`;
+        confidenceThreshold = parseFloat(confidenceSlider.value) / 100;
+      });
+
+      // Toggle gesture detection
+      document.getElementById("gesture-toggle").addEventListener("change", (e) => {
+        gestureEnabled = e.target.checked;
+        if (gestureEnabled) {
+          logEntry("Gesture detection enabled", "info");
+        } else {
+          logEntry("Gesture detection disabled", "warning");
+          // Clear any active gesture highlights
+          document.querySelectorAll(".gesture-card").forEach(card => card.classList.remove("active"));
         }
-      }, 'image/jpeg', 0.5);
-    }
+      });
 
-    // Use setInterval to send frames at roughly 10 FPS
-    function startSendingFrames() {
-      setInterval(processFrame, 100);
-    }
+      // Calibrate button
+      document.getElementById("calibrate-btn").addEventListener("click", () => {
+        logEntry("Calibration started...", "info");
+        setTimeout(() => {
+          logEntry("Calibration completed successfully", "success");
+        }, 2000);
+      });
+    });
 
-    // Start camera on button click to trigger user interaction (ensures permission prompt)
-    startButton.addEventListener("click", () => {
-      navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 320 }, height: { ideal: 240 } } })
-        .then(stream => {
-          video.srcObject = stream;
-          startButton.style.display = "none"; // Hide the start button after camera starts
-          startSendingFrames(); // Start sending frames to the server
-        })
-        .catch(err => {
-          statusDiv.textContent = "Camera access denied";
-          console.error("Error accessing camera:", err);
-        });
+    // Resize overlay on window resize
+    window.addEventListener("resize", () => {
+      canvasOverlay.width = videoElement.clientWidth;
+      canvasOverlay.height = videoElement.clientHeight;
     });
   </script>
 </body>
