@@ -1,0 +1,39 @@
+Manifest-Version: 1.0
+Bnd-LastModified: 1425833270427
+Build-Jdk: 1.8.0_31
+Built-By: ochafik
+Bundle-Activator: org.bridj.OSGiBundleActivator
+Bundle-Description: NativeLibs4Java is an umbrella project that gathers 
+ ready-to-use Java libraries that wrap various native libraries.Most of 
+ these wrappers are created automatically by JNAerator.
+Bundle-License: http://code.google.com/p/bridj/wiki/CreditsAndLicense
+Bundle-ManifestVersion: 2
+Bundle-Name: BridJ (NativeLibs4Java C/C++ Interop Layer)
+Bundle-SymbolicName: com.nativelibs4java.bridj
+Bundle-Version: 0.7.0
+Created-By: Apache Maven Bundle Plugin
+Export-Package: org.bridj;uses:="org.bridj.ann,org.bridj.util,com.androi
+ d.dx.dex.cf,com.android.dx.dex.file,com.android.dx.dex,dalvik.system,an
+ droid.os,android.content.pm,android.app,org.bridj.demangling,org.bridj.
+ dyncall,org.objectweb.asm,org.osgi.framework,org.bridj.cpp";version="0.
+ 7.0",org.bridj.ann;uses:="org.bridj";version="0.7.0",org.bridj.cpp;uses
+ :="org.bridj.ann,org.bridj,org.bridj.demangling,org.bridj.util,org.brid
+ j.dyncall";version="0.7.0",org.bridj.cpp.com;uses:="org.bridj,org.bridj
+ .cpp,org.bridj.ann,org.bridj.util";version="0.7.0",org.bridj.cpp.com.sh
+ ell;uses:="org.bridj.cpp.com,org.bridj.ann,org.bridj";version="0.7.0",o
+ rg.bridj.cpp.mfc;uses:="org.bridj,org.bridj.ann,org.bridj.func,org.brid
+ j.cpp,org.bridj.util";version="0.7.0",org.bridj.cpp.std;uses:="org.brid
+ j,org.bridj.ann,org.bridj.cpp";version="0.7.0",org.bridj.demangling;use
+ s:="org.bridj.util,org.bridj,org.bridj.ann";version="0.7.0",org.bridj.d
+ yncall;uses:="org.bridj.ann,org.bridj";version="0.7.0",org.bridj.func;v
+ ersion="0.7.0",org.bridj.jawt;uses:="org.bridj,org.bridj.ann";version="
+ 0.7.0",org.bridj.objc;uses:="org.bridj.ann,org.bridj,org.bridj.util,org
+ .bridj.demangling";version="0.7.0",org.bridj.util;uses:="org.objectweb.
+ asm,org.bridj,org.bridj.ann";version="0.7.0"
+Import-Package: android.app;resolution:=optional,android.content.pm;reso
+ lution:=optional,android.os;resolution:=optional,com.android.dx.dex;res
+ olution:=optional,com.android.dx.dex.cf;resolution:=optional,com.androi
+ d.dx.dex.file;resolution:=optional,dalvik.system;resolution:=optional,o
+ rg.objectweb.asm;resolution:=optional,org.osgi.framework;version="[1.6,
+ 2)"
+Tool: Bnd-1.50.0

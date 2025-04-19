@@ -1,0 +1,44 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group 'com.gesturecontrol'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 11
+targetCompatibility = 11
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // JSON Processing
+    implementation 'org.json:json:20230618'
+
+    // Webcam Capture library
+    implementation 'com.github.sarxos:webcam-capture:0.3.12'
+
+    // SLF4J API and binding
+    implementation 'org.slf4j:slf4j-api:1.7.36'
+    implementation 'org.slf4j:slf4j-simple:1.7.36'
+}
+
+application {
+    mainClass = 'GestureControlClient'
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'GestureControlClient'
+    }
+
+    // Include all dependencies in the jar
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+
+    // Solve duplicate entries
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
