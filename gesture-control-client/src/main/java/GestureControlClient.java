@@ -26,21 +26,25 @@ public class GestureControlClient extends JFrame {
     private static final int PANEL_PADDING = 20;
     private static final int GESTURE_DISPLAY_TIME = 2000; // Show gesture label for 2 seconds
 
-    // Colors
-    private static final Color BG_COLOR = new Color(30, 30, 40);
-    private static final Color PRIMARY_COLOR = new Color(76, 175, 80);
-    private static final Color ACCENT_COLOR = new Color(255, 193, 7);
-    private static final Color TEXT_COLOR = new Color(255, 255, 255);
-    private static final Color INACTIVE_COLOR = new Color(100, 100, 100);
+    // Modern Dark Theme Colors
+    private static final Color BG_COLOR = new Color(18, 18, 26);
+    private static final Color PANEL_COLOR = new Color(24, 24, 37);
+    private static final Color PRIMARY_COLOR = new Color(80, 250, 123);
+    private static final Color ACCENT_COLOR = new Color(255, 184, 108);
+    private static final Color SECONDARY_COLOR = new Color(139, 233, 253);
+    private static final Color TEXT_COLOR = new Color(248, 248, 242);
+    private static final Color DARK_TEXT = new Color(68, 71, 90);
+    private static final Color INACTIVE_COLOR = new Color(98, 114, 164);
+    private static final Color BUTTON_HOVER = new Color(40, 42, 54);
 
     // UI Components
     private JPanel cameraPanel;
     private JPanel controlPanel;
-    private JProgressBar fanMeter;
-    private JProgressBar volumeMeter;
-    private JButton toggleFanButton;
-    private JButton increaseButton;
-    private JButton decreaseButton;
+    private CustomProgressBar fanMeter;
+    private CustomProgressBar volumeMeter;
+    private RoundedButton toggleFanButton;
+    private RoundedButton increaseButton;
+    private RoundedButton decreaseButton;
     private JLabel fanStatusLabel;
     private JLabel volumeStatusLabel;
     private JLabel connectionStatusLabel;
@@ -73,6 +77,8 @@ public class GestureControlClient extends JFrame {
         setSize(FRAME_WIDTH, FRAME_HEIGHT);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
+        setBackground(BG_COLOR);
+        setIconImage(createAppIcon());
 
         // Initialize components
         initializeUI();
@@ -86,119 +92,182 @@ public class GestureControlClient extends JFrame {
         // Start frame sender
         startFrameSender();
 
+        setLocationRelativeTo(null); // Center on screen
         setVisible(true);
     }
 
+    private Image createAppIcon() {
+        BufferedImage icon = new BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2d = icon.createGraphics();
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.setColor(PANEL_COLOR);
+        g2d.fillRect(0, 0, 32, 32);
+        g2d.setColor(PRIMARY_COLOR);
+        g2d.fillOval(4, 4, 24, 24);
+        g2d.setColor(PANEL_COLOR);
+        g2d.fillOval(8, 8, 16, 16);
+        g2d.dispose();
+        return icon;
+    }
+
     private void initializeUI() {
+        // Set background for the frame
+        JPanel contentPane = new JPanel(new BorderLayout());
+        contentPane.setBackground(BG_COLOR);
+        setContentPane(contentPane);
+
         // Camera panel (left side)
         cameraPanel = new JPanel();
         cameraPanel.setPreferredSize(new Dimension(CAM_WIDTH, FRAME_HEIGHT));
         cameraPanel.setBackground(Color.BLACK);
         cameraPanel.setLayout(new BorderLayout());
+        cameraPanel.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 2, PANEL_COLOR.darker()));
 
         // FPS and Gesture labels
         JPanel overlayPanel = new JPanel(new BorderLayout());
         overlayPanel.setOpaque(false);
 
         fpsLabel = new JLabel("FPS: 0");
-        fpsLabel.setForeground(Color.YELLOW);
-        fpsLabel.setFont(new Font("SansSerif", Font.BOLD, 14));
+        fpsLabel.setForeground(SECONDARY_COLOR);
+        fpsLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
         fpsLabel.setBorder(BorderFactory.createEmptyBorder(10, 10, 0, 0));
         overlayPanel.add(fpsLabel, BorderLayout.NORTH);
 
         gestureLabel = new JLabel("");
         gestureLabel.setForeground(ACCENT_COLOR);
-        gestureLabel.setFont(new Font("SansSerif", Font.BOLD, 18));
+        gestureLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
         gestureLabel.setHorizontalAlignment(JLabel.CENTER);
-        overlayPanel.add(gestureLabel, BorderLayout.SOUTH);
+        gestureLabel.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(PANEL_COLOR, 10),
+                BorderFactory.createEmptyBorder(5, 10, 5, 10)
+        ));
+        gestureLabel.setOpaque(false);
+        gestureLabel.setVisible(false);  // Hide until a gesture is detected
+
+        JPanel gestureLabelPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        gestureLabelPanel.setOpaque(false);
+        gestureLabelPanel.add(gestureLabel);
+        overlayPanel.add(gestureLabelPanel, BorderLayout.SOUTH);
 
         cameraPanel.add(overlayPanel, BorderLayout.CENTER);
 
         // Control panel (right side)
-        controlPanel = new JPanel();
+        controlPanel = new RoundedPanel(20, PANEL_COLOR);
         controlPanel.setPreferredSize(new Dimension(UI_WIDTH, FRAME_HEIGHT));
-        controlPanel.setBackground(BG_COLOR);
         controlPanel.setLayout(null); // Absolute positioning
 
         // Title
         JLabel titleLabel = new JLabel("Gesture Control");
         titleLabel.setForeground(TEXT_COLOR);
-        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 24));
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
         titleLabel.setBounds(PANEL_PADDING, 10, UI_WIDTH - 2 * PANEL_PADDING, 30);
         controlPanel.add(titleLabel);
 
-        // Fan meter
+        // Fan meter section
+        RoundedPanel fanPanel = new RoundedPanel(15, PANEL_COLOR.darker());
+        fanPanel.setBounds(PANEL_PADDING, 50, UI_WIDTH - 2 * PANEL_PADDING, 220);
+        fanPanel.setLayout(null);
+
         JLabel fanLabel = new JLabel("Fan Control (Right Hand)");
         fanLabel.setForeground(TEXT_COLOR);
-        fanLabel.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        fanLabel.setBounds(PANEL_PADDING, 50, UI_WIDTH - 2 * PANEL_PADDING, 20);
-        controlPanel.add(fanLabel);
+        fanLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        fanLabel.setBounds(15, 10, UI_WIDTH - 2 * PANEL_PADDING - 30, 20);
+        fanPanel.add(fanLabel);
 
-        fanMeter = new JProgressBar(JProgressBar.VERTICAL, 0, 100);
+        fanMeter = new CustomProgressBar(0, 100, PRIMARY_COLOR, INACTIVE_COLOR, PANEL_COLOR);
         fanMeter.setValue(fanSpeed);
-        fanMeter.setForeground(INACTIVE_COLOR);
-        fanMeter.setBackground(new Color(50, 50, 60));
-        fanMeter.setBounds(PANEL_PADDING, 70, UI_WIDTH - 2 * PANEL_PADDING, 150);
-        fanMeter.setBorder(BorderFactory.createEmptyBorder());
-        controlPanel.add(fanMeter);
+        fanMeter.setOrientation(SwingConstants.VERTICAL);
+        fanMeter.setBounds((UI_WIDTH - 2 * PANEL_PADDING) / 2 - 40, 40, 80, 120);
+        fanPanel.add(fanMeter);
 
         fanStatusLabel = new JLabel("Fan: STOPPED");
         fanStatusLabel.setForeground(INACTIVE_COLOR);
-        fanStatusLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
-        fanStatusLabel.setBounds(PANEL_PADDING, 230, UI_WIDTH - 2 * PANEL_PADDING, 20);
-        controlPanel.add(fanStatusLabel);
+        fanStatusLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        fanStatusLabel.setHorizontalAlignment(JLabel.CENTER);
+        fanStatusLabel.setBounds(0, 170, UI_WIDTH - 2 * PANEL_PADDING, 20);
+        fanPanel.add(fanStatusLabel);
 
-        // Volume meter
+        controlPanel.add(fanPanel);
+
+        // Volume meter section
+        RoundedPanel volumePanel = new RoundedPanel(15, PANEL_COLOR.darker());
+        volumePanel.setBounds(PANEL_PADDING, 280, UI_WIDTH - 2 * PANEL_PADDING, 220);
+        volumePanel.setLayout(null);
+
         JLabel volumeLabel = new JLabel("Volume Control (Left Hand)");
         volumeLabel.setForeground(TEXT_COLOR);
-        volumeLabel.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        volumeLabel.setBounds(PANEL_PADDING, 250, UI_WIDTH - 2 * PANEL_PADDING, 20);
-        controlPanel.add(volumeLabel);
+        volumeLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        volumeLabel.setBounds(15, 10, UI_WIDTH - 2 * PANEL_PADDING - 30, 20);
+        volumePanel.add(volumeLabel);
 
-        volumeMeter = new JProgressBar(JProgressBar.VERTICAL, 0, 100);
+        volumeMeter = new CustomProgressBar(0, 100, SECONDARY_COLOR, INACTIVE_COLOR, PANEL_COLOR);
         volumeMeter.setValue(volumeLevel);
-        volumeMeter.setForeground(PRIMARY_COLOR);
-        volumeMeter.setBackground(new Color(50, 50, 60));
-        volumeMeter.setBounds(PANEL_PADDING, 270, UI_WIDTH - 2 * PANEL_PADDING, 150);
-        volumeMeter.setBorder(BorderFactory.createEmptyBorder());
-        controlPanel.add(volumeMeter);
+        volumeMeter.setOrientation(SwingConstants.VERTICAL);
+        volumeMeter.setBounds((UI_WIDTH - 2 * PANEL_PADDING) / 2 - 40, 40, 80, 120);
+        volumePanel.add(volumeMeter);
 
         volumeStatusLabel = new JLabel("System Volume: 50%");
-        volumeStatusLabel.setForeground(PRIMARY_COLOR);
-        volumeStatusLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
-        volumeStatusLabel.setBounds(PANEL_PADDING, 430, UI_WIDTH - 2 * PANEL_PADDING, 20);
-        controlPanel.add(volumeStatusLabel);
+        volumeStatusLabel.setForeground(SECONDARY_COLOR);
+        volumeStatusLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        volumeStatusLabel.setHorizontalAlignment(JLabel.CENTER);
+        volumeStatusLabel.setBounds(0, 170, UI_WIDTH - 2 * PANEL_PADDING, 20);
+        volumePanel.add(volumeStatusLabel);
+
+        controlPanel.add(volumePanel);
 
         // Control buttons
-        increaseButton = new JButton("+");
-        increaseButton.setBounds(PANEL_PADDING, 470, 60, 40);
+        int buttonWidth = 50;
+        int buttonHeight = 50;
+        int buttonSpacing = 10;
+        int totalButtonsWidth = 2 * buttonWidth + buttonSpacing;
+        int buttonsStartX = PANEL_PADDING + (UI_WIDTH - 2 * PANEL_PADDING - totalButtonsWidth) / 2;
+
+        increaseButton = new RoundedButton("+", buttonWidth, buttonHeight);
+        increaseButton.setBounds(buttonsStartX, 510, buttonWidth, buttonHeight);
+        increaseButton.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        increaseButton.setForeground(TEXT_COLOR);
+        increaseButton.setBackground(INACTIVE_COLOR);
         increaseButton.setEnabled(false);
         increaseButton.addActionListener(e -> adjustFanSpeed(25));
         controlPanel.add(increaseButton);
 
-        decreaseButton = new JButton("-");
-        decreaseButton.setBounds(PANEL_PADDING + 70, 470, 60, 40);
+        decreaseButton = new RoundedButton("-", buttonWidth, buttonHeight);
+        decreaseButton.setBounds(buttonsStartX + buttonWidth + buttonSpacing, 510, buttonWidth, buttonHeight);
+        decreaseButton.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        decreaseButton.setForeground(TEXT_COLOR);
+        decreaseButton.setBackground(INACTIVE_COLOR);
         decreaseButton.setEnabled(false);
         decreaseButton.addActionListener(e -> adjustFanSpeed(-25));
         controlPanel.add(decreaseButton);
 
-        toggleFanButton = new JButton("TOGGLE FAN");
-        toggleFanButton.setBounds(PANEL_PADDING, 520, UI_WIDTH - 2 * PANEL_PADDING, 50);
-        toggleFanButton.setBackground(INACTIVE_COLOR);
+        toggleFanButton = new RoundedButton("TOGGLE FAN", UI_WIDTH - 2 * PANEL_PADDING, 50);
+        toggleFanButton.setBounds(PANEL_PADDING, 570, UI_WIDTH - 2 * PANEL_PADDING, 50);
+        toggleFanButton.setFont(new Font("Segoe UI", Font.BOLD, 14));
         toggleFanButton.setForeground(TEXT_COLOR);
+        toggleFanButton.setBackground(INACTIVE_COLOR);
         toggleFanButton.addActionListener(e -> toggleFan());
         controlPanel.add(toggleFanButton);
 
         // Connection status
         connectionStatusLabel = new JLabel("Connection: Disconnected");
         connectionStatusLabel.setForeground(ACCENT_COLOR);
-        connectionStatusLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        connectionStatusLabel.setBounds(PANEL_PADDING, FRAME_HEIGHT - 50, UI_WIDTH - 2 * PANEL_PADDING, 20);
+        connectionStatusLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        connectionStatusLabel.setBounds(PANEL_PADDING, FRAME_HEIGHT - 40, UI_WIDTH - 2 * PANEL_PADDING, 20);
         controlPanel.add(connectionStatusLabel);
 
         // Add panels to frame
-        add(cameraPanel, BorderLayout.WEST);
-        add(controlPanel, BorderLayout.EAST);
+        JPanel wrapperPanel = new JPanel(new BorderLayout());
+        wrapperPanel.setBackground(BG_COLOR);
+        wrapperPanel.add(cameraPanel, BorderLayout.WEST);
+
+        JPanel controlWrapperPanel = new JPanel(new BorderLayout());
+        controlWrapperPanel.setBackground(BG_COLOR);
+        controlWrapperPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        controlWrapperPanel.add(controlPanel, BorderLayout.CENTER);
+
+        wrapperPanel.add(controlWrapperPanel, BorderLayout.CENTER);
+
+        add(wrapperPanel, BorderLayout.CENTER);
     }
 
     private void initializeWebcam() {
@@ -370,7 +439,7 @@ public class GestureControlClient extends JFrame {
 
                 // Update UI components
                 fanMeter.setValue(fanSpeed);
-                fanMeter.setForeground(fanState ? PRIMARY_COLOR : INACTIVE_COLOR);
+                fanMeter.setActiveColor(fanState ? PRIMARY_COLOR : INACTIVE_COLOR);
                 fanStatusLabel.setText("Fan: " + (fanState ? "RUNNING" : "STOPPED"));
                 fanStatusLabel.setForeground(fanState ? PRIMARY_COLOR : INACTIVE_COLOR);
 
@@ -380,7 +449,9 @@ public class GestureControlClient extends JFrame {
                 toggleFanButton.setBackground(fanState ? PRIMARY_COLOR : INACTIVE_COLOR);
 
                 increaseButton.setEnabled(fanState);
+                increaseButton.setBackground(fanState ? PRIMARY_COLOR : INACTIVE_COLOR);
                 decreaseButton.setEnabled(fanState);
+                decreaseButton.setBackground(fanState ? PRIMARY_COLOR : INACTIVE_COLOR);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -419,12 +490,14 @@ public class GestureControlClient extends JFrame {
             }
 
             gestureLabel.setText(displayText);
+            gestureLabel.setVisible(true);
 
             // Start a timer to clear the gesture after 2 seconds
             Timer timer = new Timer(GESTURE_DISPLAY_TIME, e -> {
                 if (lastGesture.equals(gesture) &&
                         System.currentTimeMillis() - lastGestureTime >= GESTURE_DISPLAY_TIME) {
                     gestureLabel.setText("");
+                    gestureLabel.setVisible(false);
                 }
             });
             timer.setRepeats(false);
@@ -541,10 +614,221 @@ public class GestureControlClient extends JFrame {
         }
     }
 
+    // Custom UI Components
+
+    // Custom rounded panel
+    private static class RoundedPanel extends JPanel {
+        private int cornerRadius;
+        private Color backgroundColor;
+
+        public RoundedPanel(int radius, Color bgColor) {
+            super();
+            cornerRadius = radius;
+            backgroundColor = bgColor;
+            setOpaque(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Dimension arcs = new Dimension(cornerRadius, cornerRadius);
+            int width = getWidth();
+            int height = getHeight();
+            Graphics2D g2d = (Graphics2D) g;
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            // Draw background
+            g2d.setColor(backgroundColor);
+            g2d.fillRoundRect(0, 0, width-1, height-1, arcs.width, arcs.height);
+        }
+    }
+
+    // Custom rounded border
+    private static class RoundedBorder implements Border {
+        private int radius;
+        private Color color;
+
+        public RoundedBorder(Color color, int radius) {
+            this.radius = radius;
+            this.color = color;
+        }
+
+        @Override
+        public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
+            Graphics2D g2d = (Graphics2D) g.create();
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.setColor(color);
+            g2d.drawRoundRect(x, y, width-1, height-1, radius, radius);
+            g2d.dispose();
+        }
+
+        @Override
+        public Insets getBorderInsets(Component c) {
+            return new Insets(radius/2, radius/2, radius/2, radius/2);
+        }
+
+        @Override
+        public boolean isBorderOpaque() {
+            return false;
+        }
+    }
+
+    // Custom rounded button
+    private static class RoundedButton extends JButton {
+        private int cornerRadius = 15;
+        private boolean isHovered = false;
+
+        public RoundedButton(String text, int width, int height) {
+            super(text);
+            setOpaque(false);
+            setContentAreaFilled(false);
+            setFocusPainted(false);
+            setBorderPainted(false);
+            setPreferredSize(new Dimension(width, height));
+
+            // Add hover effect
+            addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseEntered(MouseEvent e) {
+                    if (isEnabled()) {
+                        isHovered = true;
+                        repaint();
+                    }
+                }
+
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    isHovered = false;
+                    repaint();
+                }
+            });
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2d = (Graphics2D) g.create();
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            // Draw background
+            if (isEnabled()) {
+                g2d.setColor(isHovered ? getBackground().brighter() : getBackground());
+            } else {
+                g2d.setColor(INACTIVE_COLOR.darker());
+            }
+
+            g2d.fillRoundRect(0, 0, getWidth(), getHeight(), cornerRadius, cornerRadius);
+
+            // Draw border
+            g2d.setColor(isEnabled() ? getBackground().brighter() : INACTIVE_COLOR);
+            g2d.drawRoundRect(0, 0, getWidth()-1, getHeight()-1, cornerRadius, cornerRadius);
+
+            g2d.dispose();
+
+            super.paintComponent(g);
+        }
+    }
+
+    // Custom progress bar
+    private static class CustomProgressBar extends JProgressBar {
+        private Color activeColor;
+        private Color inactiveColor;
+        private Color backgroundColor;
+
+        public CustomProgressBar(int min, int max, Color active, Color inactive, Color bg) {
+            super(min, max);
+            this.activeColor = active;
+            this.inactiveColor = inactive;
+            this.backgroundColor = bg;
+            setOpaque(false);
+            setBorderPainted(false);
+            setForeground(active);
+        }
+
+        public void setActiveColor(Color color) {
+            this.activeColor = color;
+            setForeground(color);
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2d = (Graphics2D) g.create();
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            int cornerRadius = 10;
+            int width = getWidth();
+            int height = getHeight();
+
+            // Background
+            g2d.setColor(backgroundColor);
+            g2d.fillRoundRect(0, 0, width, height, cornerRadius, cornerRadius);
+
+            // Border
+            g2d.setColor(inactiveColor.darker());
+            g2d.drawRoundRect(0, 0, width-1, height-1, cornerRadius, cornerRadius);
+
+            // Progress
+            if (getOrientation() == SwingConstants.HORIZONTAL) {
+                int filledWidth = (int)(width * getPercentComplete());
+                if (filledWidth > 0) {
+                    g2d.setColor(getForeground());
+                    g2d.fillRoundRect(0, 0, filledWidth, height, cornerRadius, cornerRadius);
+                }
+            } else { // VERTICAL
+                int filledHeight = (int)(height * getPercentComplete());
+                if (filledHeight > 0) {
+                    // For vertical progress bar, fill from bottom to top
+                    int y = height - filledHeight;
+                    g2d.setColor(getForeground());
+                    g2d.fillRoundRect(0, y, width, filledHeight, cornerRadius, cornerRadius);
+
+                    // Add value indicators (tick marks)
+                    g2d.setColor(TEXT_COLOR);
+                    for (int i = 0; i <= 4; i++) {
+                        int tickY = height - (height * i / 4);
+                        g2d.fillRect(width/2 - 15, tickY, 30, 1);
+                    }
+                }
+            }
+
+            // Draw value text
+            String valueText = getValue() + "%";
+            FontMetrics fm = g2d.getFontMetrics();
+            int textWidth = fm.stringWidth(valueText);
+            int textHeight = fm.getHeight();
+
+            g2d.setColor(TEXT_COLOR);
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
+
+            if (getOrientation() == SwingConstants.VERTICAL) {
+                g2d.drawString(valueText, (width - textWidth) / 2, height - 5);
+            } else {
+                g2d.drawString(valueText, (width - textWidth) / 2, (height + textHeight) / 2 - 2);
+            }
+
+            g2d.dispose();
+        }
+    }
+
     public static void main(String[] args) {
         try {
             // Set system look and feel
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+
+            // Apply nimbus look and feel if available
+            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
+                if ("Nimbus".equals(info.getName())) {
+                    UIManager.setLookAndFeel(info.getClassName());
+                    break;
+                }
+            }
+
+            // Set global UI properties
+            UIManager.put("ProgressBar.background", new Color(30, 30, 40));
+            UIManager.put("ProgressBar.foreground", new Color(80, 250, 123));
+            UIManager.put("ProgressBar.selectionBackground", new Color(80, 250, 123));
+            UIManager.put("ProgressBar.selectionForeground", new Color(30, 30, 40));
+
         } catch (Exception e) {
             e.printStackTrace();
         }
